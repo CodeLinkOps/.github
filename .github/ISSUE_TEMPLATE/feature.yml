@@ -1,0 +1,57 @@
+name: 功能点
+description: 一个能在一次会话里做完、能独立验证的功能点
+title: "feat: "
+labels: ["type/feat"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **建完记得挂里程碑** —— 没挂的 issue 不参与进度统计（机器人会提醒你）。
+
+        粒度：一次 AI 会话能做完、能独立验证「做完了没有」。进度是按 issue **条数**
+        算的，一条顶十件事的话，里程碑会长期停在 0% 然后突然跳到 100%。
+
+  - type: textarea
+    id: what
+    attributes:
+      label: 要做什么
+      description: 从使用者角度写一句话。
+    validations:
+      required: true
+
+  - type: textarea
+    id: done
+    attributes:
+      label: 怎么算做完了
+      description: |
+        可验证的判据。「实现 X 功能」不是判据，「调用 /api/x 返回 …」才是。
+        这一栏是 AI 判断自己有没有做完的唯一依据，写模糊了它会自己定义完成。
+      placeholder: |
+        - [ ]
+        - [ ]
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: 领域
+      description: 决定这条活派给谁，别留错。
+      options:
+        - backend
+        - web
+        - app
+        - infra
+        - docs
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: 背景与约束
+      description: |
+        设计文档里的哪一节、依赖哪条 issue、有什么不能碰的地方。
+        没有就留空。
+    validations:
+      required: false

@@ -1,0 +1,60 @@
+name: 缺陷
+description: 某个东西的行为和预期不一样
+title: "fix: "
+labels: ["type/fix"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **建完记得挂里程碑**，否则它不参与进度统计。线上问题记得同时打 `p0`/`p1`。
+
+  - type: textarea
+    id: what
+    attributes:
+      label: 现象
+      description: 看到了什么。有报错就贴原文，别转述 —— 转述会把关键的那个词丢掉。
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 预期
+      description: 本该是什么样。
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: 怎么复现
+      description: |
+        步骤，越具体越好。**复现不了也要说**「偶发，N 次里出现 1 次」——
+        写成必现会让人按错误的方向查。
+      placeholder: |
+        1.
+        2.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: 领域
+      options:
+        - backend
+        - web
+        - app
+        - infra
+        - docs
+    validations:
+      required: true
+
+  - type: input
+    id: env
+    attributes:
+      label: 环境
+      description: 分支 / 版本 / 部署环境。
+      placeholder: dev, commit abc1234, 本地
+    validations:
+      required: false

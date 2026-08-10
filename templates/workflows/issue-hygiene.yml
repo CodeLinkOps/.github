@@ -1,0 +1,16 @@
+# 抄进各仓库的 .github/workflows/issue-hygiene.yml
+#
+# 没挂里程碑的 issue 打上 needs-triage 并留一条说明，挂上之后自动摘掉。
+# 实现在 CodeLinkOps/.github，这里只调用。
+name: issue-hygiene
+
+on:
+  issues:
+    # milestoned / demilestoned 不能省 —— 少了它，挂上里程碑之后
+    # needs-triage 标签会一直留着，人得手动摘，摘几次就不摘了，
+    # 然后这个标签失去意义。
+    types: [opened, reopened, milestoned, demilestoned]
+
+jobs:
+  hygiene:
+    uses: CodeLinkOps/.github/.github/workflows/issue-hygiene.yml@main

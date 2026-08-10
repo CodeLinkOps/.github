@@ -1,0 +1,54 @@
+# 没挂里程碑的 issue 会被打上 needs-triage 并留一条说明。
+#
+# 为什么需要它：issue 模板能自动打标签，但**设不了里程碑** —— GitHub 的
+# issue form 没有这个字段。而「每个 issue 必须挂里程碑」正是进度统计的前提：
+# 没挂的不是「算成未完成」，是根本不参与计算。做完十件事而进度纹丝不动，
+# 人会以为统计坏了，然后不再相信它。
+#
+# 所以这条规则不能只写在文档里。
+name: issue-hygiene
+
+on:
+  workflow_call:
+
+permissions:
+  issues: write
+
+jobs:
+  milestone:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const LABEL = 'needs-triage';
+            const issue = context.payload.issue;
+            if (!issue) return;
+
+            const base = {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issue.number,
+            };
+            const has = (issue.labels || []).some((l) => (l.name || l) === LABEL);
+
+            if (issue.milestone) {
+              // 挂上了就把标记摘掉。摘不掉不算失败 —— 多半是标签已经被人删了。
+              if (has) {
+                await github.rest.issues.removeLabel({ ...base, name: LABEL }).catch(() => {});
+              }
+              return;
+            }
+
+            if (has) return; // 已经提醒过，别重复刷评论
+
+            await github.rest.issues.addLabels({ ...base, labels: [LABEL] });
+            await github.rest.issues.createComment({
+              ...base,
+              body:
+                '这条 issue 还没挂里程碑，**它不会出现在任何进度统计里** —— ' +
+                '不是算成未完成，是根本不参与计算。\n\n' +
+                '挂上里程碑之后这个标签会自动摘掉。确实不属于任何里程碑的话，' +
+                '打上 `blocked` 说明原因。\n\n' +
+                '<sub>规范：https://github.com/CodeLinkOps/.github/blob/main/README.md#6-里程碑与进度</sub>',
+            });

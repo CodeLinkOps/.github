@@ -1,0 +1,15 @@
+# 抄进各仓库的 .github/workflows/agent-authorship.yml
+#
+# 只调用，不抄实现 —— 规则改动只需改 CodeLinkOps/.github 一处。
+# 那个仓库是公开的，所以私有仓库也能直接引用它的 workflow。
+name: ci
+
+on:
+  pull_request:
+    # labeled / unlabeled 不能省：打上 break-glass 标签之后要重跑，
+    # 否则那个红叉会一直挂着，而人只能去点 re-run。
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+jobs:
+  authorship:
+    uses: CodeLinkOps/.github/.github/workflows/agent-authorship.yml@main

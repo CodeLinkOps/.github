@@ -1,0 +1,10 @@
+# 不给「空白 issue」入口：那条路会绕过标签和判据两栏，
+# 而没有判据的 issue 会让 AI 自己定义什么叫做完。
+blank_issues_enabled: false
+contact_links:
+  - name: 工程规范
+    url: https://github.com/CodeLinkOps/.github/blob/main/README.md
+    about: 建项目、分支、合入、选型、里程碑的规则
+  - name: Agent 工作约束
+    url: https://github.com/CodeLinkOps/.github/blob/main/AGENTS.md
+    about: 各仓库 AGENTS.md 的来源

@@ -1,0 +1,100 @@
+# 校验 PR 里每个提交都带 agent 署名。
+#
+# 这是一个可复用 workflow —— 各仓库不要抄这个文件，抄 templates/workflows/ 下
+# 那几行调用它。抄整份的话，改一次规则要改 N 个仓库，而漏掉的那个不会报错。
+#
+# **能力边界**：手写一行 `Co-Authored-By:` 谁都会，所以它挡不住有意为之的人。
+# 它拦的是「顺手」—— 网页上直接改一行、本地图省事自己动手，那些不带 trailer，
+# 会当场变红。真正的把关在 review。
+name: agent-authorship
+
+on:
+  workflow_call:
+    inputs:
+      break_glass_label:
+        description: 带这个标签的 PR 跳过检查（见工程规范 §9 逃生门）
+        type: string
+        required: false
+        default: break-glass
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        env:
+          BREAK_GLASS_LABEL: ${{ inputs.break_glass_label }}
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            if (!pr) {
+              core.setFailed('这个检查只能挂在 pull_request 事件上。');
+              return;
+            }
+
+            const breakGlass = process.env.BREAK_GLASS_LABEL || 'break-glass';
+            const labels = (pr.labels || []).map((l) => l.name);
+            if (labels.includes(breakGlass)) {
+              core.notice(
+                `PR 带 ${breakGlass} 标签，跳过署名检查。` +
+                  '记得事后补一条 issue，说明这次破例暴露了什么问题 —— ' +
+                  '只破例不记录的话，逃生门会慢慢变成正门。'
+              );
+              return;
+            }
+
+            // GitHub 对一个 PR 最多只返回 250 个提交，翻页也一样。
+            // 截断了就要说出来 —— 静默放过后面那些，等于这个检查在最需要它的
+            // 大 PR 上失效，而结果看起来是绿的。
+            const commits = await github.paginate(github.rest.pulls.listCommits, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr.number,
+              per_page: 100,
+            });
+            if (commits.length >= 250) {
+              core.warning(
+                `这个 PR 的提交数达到了 API 上限（${commits.length}），` +
+                  '第 250 个之后的提交没有被检查。建议拆分 PR。'
+              );
+            }
+
+            // 认两种写法：
+            //   Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+            //   Agent: codex/gpt-5
+            const SIGNED =
+              /^[ \t]*(?:co-authored-by:[ \t]*(?:claude|codex|gpt|copilot|gemini|cursor|devin|aider)|agent:[ \t]*\S+)/im;
+
+            // 依赖升级之类的机器人 PR 本来就不是人写的，不必再要求 trailer。
+            const BOTS = new Set(['dependabot[bot]', 'github-actions[bot]', 'renovate[bot]']);
+
+            const offenders = [];
+            for (const c of commits) {
+              // merge commit 是 GitHub 自己造的，没有作者可言。
+              if ((c.parents || []).length > 1) continue;
+              if (BOTS.has(c.author?.login)) continue;
+              if (SIGNED.test(c.commit.message)) continue;
+              offenders.push(
+                `  ${c.sha.slice(0, 8)}  ${c.commit.message.split('\n')[0].slice(0, 72)}`
+              );
+            }
+
+            if (offenders.length === 0) {
+              core.info(`${commits.length} 个提交，署名都在。`);
+              return;
+            }
+
+            core.setFailed(
+              `下面 ${offenders.length} 个提交没有 agent 署名：\n` +
+                offenders.join('\n') +
+                '\n\n' +
+                '每个提交的 message 里要有下面之一：\n' +
+                '  Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>\n' +
+                '  Agent: <工具>/<模型>\n\n' +
+                '补救：`git rebase -i` 改写这几个提交的 message，或者让 agent 重做这段改动。\n' +
+                '确实是紧急情况下人手改的，给 PR 打上 `' + breakGlass + '` 标签并在正文说明。'
+            );
