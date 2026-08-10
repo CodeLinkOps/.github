@@ -336,6 +336,7 @@ DESIGN.md          要做成什么、为什么（先于代码存在）
 AGENTS.md          agent 在这个仓库怎么干活
 CLAUDE.md          一行 @AGENTS.md，见下
 .env.example       所有环境变量，值用占位符
+.org-spec.json     记录本仓库同步到了 org 规范的哪一版，见 §7.1
 Dockerfile         多阶段、非 root、带健康检查端点
 deploy/            按环境分目录的部署清单（或在 DESIGN.md 里指明用独立 GitOps 仓库）
 rust-toolchain.toml / .nvmrc / .fvmrc
@@ -363,11 +364,34 @@ rust-toolchain.toml / .nvmrc / .fvmrc
 
 > **注意**：agent 不一定能顺着链接读到内容（取决于它有没有网络和登录态）。所以 org 规范的关键条款要**抄一份**进各仓库的 `AGENTS.md`，别只留链接。本仓库的 [`AGENTS.md`](AGENTS.md) 就是为抄写准备的 —— 它是精简版，抄进去不会太长。
 
+「抄一份」有个固有代价：**这边改了，抄的那份不会跟着变。** 而漂移了没有任何征兆 —— agent 会继续按旧规则干活，理直气壮。补部署规则那次就真出过：某个仓库的 `DESIGN.md` 里写着「不做 Kubernetes」，与新规范直接冲突，而 AI 照着它做完全不会觉得有问题。
+
+所以有 [`spec-drift`](templates/workflows/spec-drift.yml)：每天比对本仓库的 `AGENTS.md` 与 `templates/DESIGN.md`，落后了就在那个仓库开一条 issue（附 compare 链接和该写进 `.org-spec.json` 的内容），跟上之后自动关闭。
+
+它**故意不阻塞 PR** —— 规范漂移不是紧急问题，让所有 PR 变红会逼人去无视它。
+
+`.org-spec.json` 记录已同步到哪一版：
+
+```json
+{
+  "source": "CodeLinkOps/.github@main",
+  "synced_commit": "<规范仓库的 commit sha>",
+  "files": {
+    "AGENTS.md": "<sha256>",
+    "templates/DESIGN.md": "<sha256>"
+  }
+}
+```
+
+新仓库不用手写 —— 没有这个文件时第一次检查会把完整内容贴在 issue 里，复制粘贴即可。
+
 ### 7.2 AGENTS.md 里写什么
 
 抄 org 规范的关键条款，加上**从代码里看不出来的东西**：为什么这么写、踩过什么坑、改动时容易碰坏什么。
 
 **不要写代码结构说明**（那些 agent 自己能看出来，而且会过时）。写「这个字段看起来能删，但删了会……」这种。
+
+> **怎么落地**：[`spec-drift`](templates/workflows/spec-drift.yml) 每天检查各仓库有没有跟上本仓库的改动，落后了开 issue、跟上了自动关 —— 它能发现漂移，但不阻塞 PR，实际同步仍然靠人/AI 做。「必备文件齐不齐」目前没有检查，靠 review。
 
 ---
 

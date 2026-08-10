@@ -1,0 +1,177 @@
+# 检查各仓库有没有跟上本仓库规范的改动。
+#
+# 为什么需要它：§7.1 要求各仓库把关键条款**抄一份**进自己的 AGENTS.md ——
+# 因为 agent 读的是本地文件树，不会自动去拉这个仓库，链接对它等于不存在。
+# 而「抄一份」的固有代价是：这边改了，抄的那份不会跟着变。
+#
+# 在有这个检查之前，「各仓库要跟上」是一条纯自觉的规则。而 §0 原则 1 说：
+# 标着靠自觉的规则一定会被违反，这不是道德问题，是概率问题。
+#
+# 真实案例（补上部署规则那次）：某个仓库的 DESIGN.md 里写着「不做 Kubernetes、
+# 用 docker compose + systemd」，与新规范直接冲突。AI 照着它去搭生产环境
+# 会搭出一套完全错的东西，**而且不会有任何提示** —— 它读不到链接里的内容，
+# 只会认认真真按那份过时的文档执行。等发现是几天的返工。
+#
+# 故意**不阻塞 PR**：规范漂移不是紧急问题，让所有 PR 变红的代价太大，
+# 而且会逼人去点 re-run 或者干脆无视。改成开一条 issue，把它变成显式待办 ——
+# 与 issue-hygiene 同一个思路：能被统计的东西必须先被结构化。
+name: spec-drift
+
+on:
+  workflow_call:
+    inputs:
+      spec_file:
+        description: 记录「已同步到哪一版」的文件
+        type: string
+        required: false
+        default: .org-spec.json
+      label:
+        description: 漂移 issue 的标签
+        type: string
+        required: false
+        default: spec-drift
+
+permissions:
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/github-script@v7
+        env:
+          SPEC_FILE: ${{ inputs.spec_file }}
+          DRIFT_LABEL: ${{ inputs.label }}
+        with:
+          script: |
+            const fs = require('fs');
+            const crypto = require('crypto');
+
+            const SPEC_FILE = process.env.SPEC_FILE;
+            const LABEL = process.env.DRIFT_LABEL;
+            const ORG = 'CodeLinkOps';
+            const SPEC_REPO = '.github';
+
+            // 只盯这两个文件：AGENTS.md 是各仓库抄写的源，templates/DESIGN.md
+            // 决定 DESIGN.md 的章节结构。README.md 是完整版规范，各仓库不抄它 ——
+            // 盯它会带来大量各仓库其实不需要跟的噪音，而噪音会让这个检查被无视。
+            const WATCHED = ['AGENTS.md', 'templates/DESIGN.md'];
+
+            const sha256 = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
+
+            // 取规范仓库当前内容与 HEAD commit
+            const head = (await github.rest.repos.getCommit({
+              owner: ORG, repo: SPEC_REPO, ref: 'main',
+            })).data.sha;
+
+            const current = {};
+            for (const path of WATCHED) {
+              const res = await github.rest.repos.getContent({
+                owner: ORG, repo: SPEC_REPO, path, ref: 'main',
+              });
+              current[path] = sha256(Buffer.from(res.data.content, 'base64'));
+            }
+
+            // 本仓库记录的已同步版本
+            let recorded = null;
+            if (fs.existsSync(SPEC_FILE)) {
+              try {
+                recorded = JSON.parse(fs.readFileSync(SPEC_FILE, 'utf8'));
+              } catch (e) {
+                core.warning(`${SPEC_FILE} 解析失败：${e.message}`);
+              }
+            }
+
+            const drifted = WATCHED.filter(
+              (p) => !recorded || recorded.files?.[p] !== current[p]
+            );
+
+            const base = { owner: context.repo.owner, repo: context.repo.repo };
+
+            // 已存在的漂移 issue。用标签找而不是标题 —— 标题措辞将来可能改，
+            // 改一次就等于把幂等关掉，而症状是重复开 issue，没人会往措辞上想。
+            const existing = (await github.rest.issues.listForRepo({
+              ...base, state: 'open', labels: LABEL, per_page: 10,
+            })).data;
+
+            if (drifted.length === 0) {
+              core.info(`已跟上 ${ORG}/${SPEC_REPO}@${head.slice(0, 7)}`);
+              // 跟上了就把提醒关掉，与 issue-hygiene 挂上里程碑后摘标签同理。
+              for (const iss of existing) {
+                await github.rest.issues.createComment({
+                  ...base, issue_number: iss.number,
+                  body: `已跟上 org 规范 \`${head.slice(0, 7)}\`，自动关闭。`,
+                });
+                await github.rest.issues.update({ ...base, issue_number: iss.number, state: 'closed' });
+              }
+              return;
+            }
+
+            const from = recorded?.synced_commit;
+            const compare = from
+              ? `https://github.com/${ORG}/${SPEC_REPO}/compare/${from}...${head}`
+              : `https://github.com/${ORG}/${SPEC_REPO}/blob/main/AGENTS.md`;
+
+            // 直接把新的 spec 文件内容贴出来，人复制粘贴就能用 ——
+            // 让人自己去算 sha256 的话，这一步会被跳过，然后检查永远红着。
+            const nextSpec = JSON.stringify({
+              source: `${ORG}/${SPEC_REPO}@main`,
+              synced_commit: head,
+              files: current,
+            }, null, 2);
+
+            const body = [
+              `org 规范有改动，本仓库还没跟上。`,
+              ``,
+              `**变了的文件**：${drifted.map((p) => '`' + p + '`').join('、')}`,
+              from ? `**本仓库上次同步到**：\`${from.slice(0, 7)}\`` : `**本仓库还没有 \`${SPEC_FILE}\`**`,
+              `**规范仓库当前**：\`${head.slice(0, 7)}\``,
+              ``,
+              `👉 **看改了什么**：${compare}`,
+              ``,
+              `---`,
+              ``,
+              `### 为什么这件事必须做`,
+              ``,
+              `agent 读的是**本地文件树**里的 \`AGENTS.md\`，不会自动去拉规范仓库 ——`,
+              `我们仓库里那个指向 org 规范的链接，对它等于不存在。`,
+              `所以规范改了而这边没抄，AI 会继续按**旧规则**干活，且不会有任何提示。`,
+              ``,
+              `### 怎么做`,
+              ``,
+              `1. 打开上面的 compare 链接，看这次改了什么。`,
+              `2. 把与本仓库相关的条款抄进本仓库的 \`AGENTS.md\`（§7.1：**别只留链接**）。`,
+              `3. \`templates/DESIGN.md\` 如果动了章节结构，本仓库的 \`DESIGN.md\` 要跟着调，`,
+              `   **并检查所有指向章节号的交叉引用** —— 章节号一移，那些会静默指错。`,
+              `4. 用下面的内容覆盖 \`${SPEC_FILE}\`，随同步的改动一起提交：`,
+              ``,
+              '```json',
+              nextSpec,
+              '```',
+              ``,
+              `同步完成后这条 issue 会在下一次检查时自动关闭。`,
+              ``,
+              `<sub>检查来源：${ORG}/${SPEC_REPO} 的 spec-drift workflow</sub>`,
+            ].filter((l) => l !== null).join('\n');
+
+            const title = 'chore: 跟上 org 规范的改动';
+
+            if (existing.length > 0) {
+              // 已经提醒过就更新正文（规范可能又改了几版），不重复开。
+              await github.rest.issues.update({
+                ...base, issue_number: existing[0].number, title, body,
+              });
+              core.info(`更新了已有的漂移 issue #${existing[0].number}`);
+              return;
+            }
+
+            // 标签可能还不存在（新仓库），先建。建不上不算失败。
+            await github.rest.issues.createLabel({
+              ...base, name: LABEL, color: 'd4c5f9',
+              description: '本仓库落后于 org 规范，需要同步',
+            }).catch(() => {});
+
+            const created = await github.rest.issues.create({ ...base, title, body, labels: [LABEL] });
+            core.warning(`本仓库落后于 org 规范，已开 issue #${created.data.number}`);
