@@ -29,7 +29,28 @@ Claude Code 用户：仓库根目录放一个 `CLAUDE.md`，内容只需一行 `
 - App：**Flutter**（严格；不用 React Native、不写原生双份）
 - 脚本：shell 或 Rust；Python 仅限数据 / ML
 - Node 包管理器：**pnpm**
+- 运行形态：**Kubernetes**（生产与预发；本地开发用 compose 随意）
+- 镜像仓库：**私有 GHCR**，`ghcr.io/codelinkops/<仓库名>`
 - 版本钉死：`rust-toolchain.toml` / `.nvmrc` + `packageManager` / `.fvmrc`；lockfile 必须提交
+
+## 部署
+
+**打 tag 触发的是「构建 + 开 PR」，不是「部署」。集群里跑什么，由 Git 里写着什么决定。**
+
+在 `prod` 分支打 `v1.2.3` 之后：CI 构建镜像推 GHCR（tag 为 `v1.2.3` 和 `sha-<短sha>`）
+→ CI 开一个只改 image tag 那一行的 PR → 人审、合并 → 同步器把集群拉到位。
+`dev` 分支合并可以自动更新 dev 环境；**prod 永远要人点一下。**
+
+- **镜像 tag 不可变**：推上去就不重推，不用 `latest`。重推同一个 tag 会让「集群里跑的是哪份代码」查不出来，而且 rollout 不触发 —— 新 pod 是新版、老 pod 是旧版。
+- 镜像必须打 `org.opencontainers.image.source` 标签指向仓库，否则包和仓库关联不上。
+- **清单里 image tag 必须加引号**：`tag: "1.0"` 是字符串，`tag: 1.0` 是浮点数，会变成 `1`。
+- 每个环境一个目录（`deploy/dev/`、`deploy/prod/`），不要一份清单加条件判断。
+- 副本数由 HPA 管的话，清单里**不要写 `replicas`** —— 会和 HPA 互相覆盖。
+- **回滚 = `git revert` 那个改 tag 的 PR 再合并。** 不用 `helm rollback` / `argocd rollback` / `kubectl rollout undo` —— 那些绕过 Git，同步器会改回去，表现成「回滚了又变回去」。
+- **不要手改生产集群**（`kubectl apply` / `edit` / `helm upgrade`）。只读的 `logs` / `describe` / `events` / `get` 随便用。
+- **「CI 绿了」和「PR 合了」都不算部署完成**，同步是异步的。判据是 Synced + Healthy。在那之前说「已触发」，别说「已上线」。
+- 清理镜像前先查集群在用哪些 tag，**必须算上 `initContainers`** —— 漏了它会删掉只在 init 阶段用的镜像，然后下次 pod 起不来。
+- 密钥不进 Git，包括部署清单。用 sealed-secrets / external-secrets 或集群侧手工建。
 
 ## 建 issue 时
 
