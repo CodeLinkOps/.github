@@ -1,0 +1,24 @@
+# 抄进各仓库的 .github/workflows/spec-drift.yml
+#
+# 检查本仓库有没有跟上 org 规范。漂移时开一条 issue（不阻塞 PR），
+# 跟上之后自动关闭。实现在 CodeLinkOps/.github，这里只调用。
+#
+# 配套：仓库根目录要有一个 .org-spec.json 记录「已同步到哪一版」。
+# 没有也能跑 —— 第一次会开一条 issue 把该写的内容直接贴给你。
+name: spec-drift
+
+on:
+  schedule:
+    # UTC 01:00 = UTC+8 09:00。上班就看到，而不是半夜开一条没人看的 issue。
+    #
+    # 注意 GitHub 的规则：仓库连续 60 天没有 push 或活动，scheduled workflow
+    # 会被自动停用，且**不会通知**。低活跃的仓库要留意这一条 ——
+    # 表现出来就是「这个检查再也没跑过」，而那正是它该发挥作用的时候。
+    - cron: '0 1 * * *'
+
+  # 改完 AGENTS.md 想立刻验证有没有同步干净时，手动跑一次。
+  workflow_dispatch:
+
+jobs:
+  drift:
+    uses: CodeLinkOps/.github/.github/workflows/spec-drift.yml@main
