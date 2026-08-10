@@ -32,6 +32,11 @@ on:
         default: spec-drift
 
 permissions:
+  # 声明了 permissions 就是**白名单** —— 没列出来的一律 none。
+  # 少了 contents: read，actions/checkout 会报
+  # `fatal: repository 'https://github.com/<owner>/<repo>/' not found`，
+  # 而那个错误看起来像仓库名写错了，完全不像权限问题。
+  contents: read
   issues: write
 
 jobs:
