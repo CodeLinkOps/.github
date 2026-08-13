@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   milestone:
-    runs-on: ubuntu-latest
+    runs-on: codelinkops-test
     steps:
       - uses: actions/github-script@v7
         with:
