@@ -41,7 +41,7 @@ permissions:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    runs-on: codelinkops-test
     steps:
       - uses: actions/checkout@v4
 
