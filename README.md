@@ -104,6 +104,8 @@ hotfix 例外：可以从 `prod` 拉 `fix/*`，PR 直接回 `prod`，但**必须
 这里没有「生产」可言 —— 它就是规范本身。
 
 > **怎么落地**：分支写保护与必需检查在仓库设置里配（`prod` 与 `dev` 都要）。PR 标题与 `Closes` 可以加 CI 检查。
+>
+> ⚠️ **现状：org 是 free plan，私有仓库配不了分支保护**（API 回 403 Upgrade to GitHub Pro，.github#1）。所以「不许直接 push / 不许 force push / 必需检查」目前**全部靠自觉**，按 [§0](#0-四条原则) 第 1 条它们是会被违反的规则。升级 Team 套餐是 owner 的决定；升级之前别以为仓库设置里替你拦着。
 
 ---
 
@@ -415,7 +417,7 @@ rust-toolchain.toml / .nvmrc / .fvmrc
 - 万一提交了密钥：**先吊销，再清历史**。顺序反了等于给攻击者留了一个窗口，而且清历史比吊销慢得多。
   - 另外**要清就得删仓库重建或让 GitHub 回收** —— force push 之后那个提交仍然能按 SHA 访问，公开仓库上尤其要当真。
 
-> **怎么落地**：`gitleaks` 是 CI 检查，能拦住。其余靠 review。
+> **怎么落地**：`gitleaks` 是 CI 检查，能拦住 —— 照 [`templates/workflows/gitleaks.yml`](templates/workflows/gitleaks.yml) 抄（直接跑二进制；`gitleaks-action` 对 org 仓库要许可证）。其余靠 review。
 
 ---
 

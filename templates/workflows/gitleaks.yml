@@ -1,0 +1,41 @@
+# 抄进各仓库的 .github/workflows/gitleaks.yml（规范 §8「密钥不进仓库」的 CI 检查）
+#
+# 直接跑二进制，**不用 `gitleaks/gitleaks-action`**：那个 action 对 organization
+# 下的仓库要 `GITLEAKS_LICENSE`，没有就直接失败（.github#1）。二进制本身免费。
+#
+# 三个坑，抄的时候别改掉：
+# - **`fetch-depth: 0` 不能省**。浅 clone 下 `gitleaks git` 什么也扫不到，
+#   而它照样返回成功 —— 一道永远绿的检查比没有检查更坏。
+# - **8.30 起没有 `detect` 子命令了**，只剩 `git` / `dir` / `stdin`。
+# - **验证这道检查时别用 AWS 文档里的示例 key**（`AKIAIOSFODNN7EXAMPLE`）：
+#   它在 gitleaks 的 allowlist 里，会被静默放行，得出「保护有效」的假结论。
+#   用一个真实格式、随手编的 key 去测。
+#
+# 仓库自己的误报豁免写在根目录 `.gitleaks.toml`（有就自动读）。
+name: gitleaks
+
+on:
+  pull_request:
+  push:
+    branches: [dev, prod]
+
+jobs:
+  gitleaks:
+    runs-on: codelinkops-test
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: 安装 gitleaks
+        env:
+          GITLEAKS_VERSION: 8.30.1
+        run: |
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            | tar -xz -C "$RUNNER_TEMP" gitleaks
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+      - name: 扫提交历史
+        run: gitleaks git --redact --verbose .
+      - name: 扫工作区
+        run: gitleaks dir --redact --verbose .
